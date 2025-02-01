@@ -18,181 +18,206 @@ import Foundation
 
 /// Represents an email that can be sent through an `SMTP` instance.
 public struct Mail {
-    /// A UUID for the mail.
-    public let uuid = UUID().uuidString
+	/// A UUID for the mail.
+	public let uuid = UUID().uuidString
 
-    /// The `User` that the `Mail` will be sent from.
-    public let from: User
+	/// El `User` remitente.
+	public let from: User
 
-    /// Array of `User`s to send the `Mail` to.
-    public let to: [User]
+	/// Lista de destinatarios principales (`to`).
+	public let to: [User]
 
-    /// Array of `User`s to cc. Defaults to none.
-    public let cc: [User]
+	/// Lista de destinatarios en copia (`cc`). Por defecto vacío.
+	public let cc: [User]
 
-    /// Array of `User`s to bcc. Defaults to none.
-    public let bcc: [User]
+	/// Lista de destinatarios en copia oculta (`bcc`). Por defecto vacío.
+	public let bcc: [User]
 
-    /// Subject of the `Mail`. Defaults to none.
-    public let subject: String
+	/// Asunto del correo. Por defecto vacío.
+	public let subject: String
 
-    /// Text of the `Mail`. Defaults to none.
-    public let text: String
+	/// Texto en **formato plano** del correo. Por defecto vacío.
+	public let text: String
 
-    /// Array of `Attachment`s for the `Mail`. If the `Mail` has multiple `Attachment`s that are alternatives to plain
-    /// text, the last one will be used as the alternative (all the `Attachments` will still be sent). Defaults to none.
-    public let attachments: [Attachment]
+	/// **NUEVO PARÁMETRO**: Texto en **formato HTML** del correo. Por defecto `nil`.
+	/// Si está presente, el contenido se incluirá como alternativa (multipart/alternative)
+	/// junto con la versión en texto plano.
+	public let html: String?
 
-    /// Attachment that is an alternative to plain text.
-    public let alternative: Attachment?
+	/// Lista de adjuntos. Por defecto vacío.
+	public let attachments: [Attachment]
 
-    /// Additional headers for the `Mail`. Header keys are capitalized and duplicate keys will overwrite each other.
-    /// Defaults to none. The following will be ignored: CONTENT-TYPE, CONTENT-DISPOSITION, CONTENT-TRANSFER-ENCODING.
-    public let additionalHeaders: [String: String]
+	/// Adjunto que se usará como alternativa (por ejemplo, HTML). Internamente gestionado.
+	public let alternative: Attachment?
 
-    /// message-id https://tools.ietf.org/html/rfc5322#section-3.6.4
-    public var id: String {
-        return "<\(uuid).Swift-SMTP@\(hostname)>"
-    }
+	/// Encabezados adicionales para el correo. Claves en mayúsculas y se sobreescriben si se repiten.
+	/// Por defecto vacío. No se consideran `CONTENT-TYPE`, `CONTENT-DISPOSITION`, `CONTENT-TRANSFER-ENCODING`.
+	public let additionalHeaders: [String: String]
 
-    /// Hostname from the email address.
-    public var hostname: String {
-        let fullEmail = from.email
-#if swift(>=4.2)
-        let atIndex = fullEmail.firstIndex(of: "@")
-#else
-        let atIndex = fullEmail.index(of: "@")
-#endif
-        let hostStart = fullEmail.index(after: atIndex!)
-        return String(fullEmail[hostStart...])
-    }
+	/// message-id https://tools.ietf.org/html/rfc5322#section-3.6.4
+	public var id: String {
+		return "<\(uuid).Swift-SMTP@\(hostname)>"
+	}
 
-    /// Initializes a `Mail` object.
-    ///
-    /// - Parameters:
-    ///     - from: The `User` that the `Mail` will be sent from.
-    ///     - to: Array of `User`s to send the `Mail` to.
-    ///     - cc: Array of `User`s to cc. Defaults to none.
-    ///     - bcc: Array of `User`s to bcc. Defaults to none.
-    ///     - subject: Subject of the `Mail`. Defaults to none.
-    ///     - text: Text of the `Mail`. Defaults to none.
-    ///     - attachments: Array of `Attachment`s for the `Mail`. If the `Mail` has multiple `Attachment`s that are
-    ///       alternatives to plain text, the last one will be used as the alternative (all the `Attachments` will still
-    ///       be sent). Defaults to none.
-    ///     - additionalHeaders: Additional headers for the `Mail`. Header keys are capitalized and duplicate keys will
-    ///       overwrite each other. Defaults to none. The following will be ignored: CONTENT-TYPE, CONTENT-DISPOSITION,
-    ///       CONTENT-TRANSFER-ENCODING.
-    public init(from: User,
-                to: [User],
-                cc: [User] = [],
-                bcc: [User] = [],
-                subject: String = "",
-                text: String = "",
-                attachments: [Attachment] = [],
-                additionalHeaders: [String: String] = [:]) {
-        self.from = from
-        self.to = to
-        self.cc = cc
-        self.bcc = bcc
-        self.subject = subject
-        self.text = text
+	/// Hostname del correo remitente.
+	public var hostname: String {
+		let fullEmail = from.email
+		#if swift(>=4.2)
+		let atIndex = fullEmail.firstIndex(of: "@")
+		#else
+		let atIndex = fullEmail.index(of: "@")
+		#endif
+		let hostStart = fullEmail.index(after: atIndex!)
+		return String(fullEmail[hostStart...])
+	}
 
-        let (alternative, attachments) = Mail.getAlternative(attachments)
-        self.alternative = alternative
-        self.attachments = attachments
+	/// Inicializa un `Mail`.
+	///
+	/// - Parameters:
+	///   - from: Remitente.
+	///   - to: Lista de destinatarios principales.
+	///   - cc: Lista de destinatarios en copia. Por defecto vacío.
+	///   - bcc: Lista de destinatarios en copia oculta. Por defecto vacío.
+	///   - subject: Asunto. Por defecto vacío.
+	///   - text: Texto en formato plano. Por defecto vacío.
+	///   - html: **NUEVO**. Texto en formato HTML. Por defecto `nil`.
+	///   - attachments: Lista de adjuntos. Si hay varios adjuntos marcados como
+	///     alternativa a texto plano, solo el último se usa como `alternative`.
+	///   - additionalHeaders: Encabezados adicionales. Por defecto vacío.
+	public init(from: User,
+				to: [User],
+				cc: [User] = [],
+				bcc: [User] = [],
+				subject: String = "",
+				text: String = "",
+				html: String? = nil,                 // <--- NUEVO PARÁMETRO
+				attachments: [Attachment] = [],
+				additionalHeaders: [String: String] = [:]) {
+		self.from = from
+		self.to = to
+		self.cc = cc
+		self.bcc = bcc
+		self.subject = subject
+		self.text = text
+		self.html = html
+		// Se determinan "alternative" y la lista final de adjuntos
+		let (alt, finalAttachments) = Mail.getAlternative(attachments, html: html)
+		self.alternative = alt
+		self.attachments = finalAttachments
 
-        self.additionalHeaders = additionalHeaders
-    }
+		self.additionalHeaders = additionalHeaders
+	}
 
-    private static func getAlternative(_ attachments: [Attachment]) -> (Attachment?, [Attachment]) {
-        var reversed: [Attachment] = attachments.reversed()
-#if swift(>=4.2)
-        let index = reversed.firstIndex(where: { $0.isAlternative })
-#else
-        let index = reversed.index(where: { $0.isAlternative })
-#endif
-        if let index = index {
-            return (reversed.remove(at: index), reversed.reversed())
-        }
-        return (nil, attachments)
-    }
+	/// Retorna una tupla con el adjunto de tipo "alternative" (HTML) y la lista de adjuntos sin ese "alternative".
+	///
+	/// - Parameters:
+	///   - attachments: Lista inicial de adjuntos.
+	///   - html: Texto en HTML (si existe).
+	///
+	/// - Returns: `(Attachment?, [Attachment])` El adjunto alternativo y la lista de adjuntos filtrada.
+	private static func getAlternative(_ attachments: [Attachment],
+									   html: String?) -> (Attachment?, [Attachment]) {
+		// Si el usuario proporciona html, creamos un Attachment HTML
+		// y removemos cualquier otro que sea "alternative".
+		if let htmlContent = html {
+			// Filtramos los adjuntos que no sean "alternative"
+			let filtered = attachments.filter { !$0.isAlternative }
+			// Creamos un nuevo Attachment HTML
+			let newHTMLAttachment = Attachment(htmlContent: htmlContent,
+											   alternative: true)
+			return (newHTMLAttachment, filtered)
+		} else {
+			// No hay html adicional, mantenemos la lógica previa:
+			// se busca el último adjunto "alternative" si lo hubiera.
+			var reversed: [Attachment] = attachments.reversed()
+			#if swift(>=4.2)
+			let index = reversed.firstIndex(where: { $0.isAlternative })
+			#else
+			let index = reversed.index(where: { $0.isAlternative })
+			#endif
+			if let index = index {
+				return (reversed.remove(at: index), reversed.reversed())
+			}
+			return (nil, attachments)
+		}
+	}
 
-    private var headersDictionary: [String: String] {
-        var dictionary = [String: String]()
-        dictionary["MESSAGE-ID"] = id
-        dictionary["DATE"] = Date().smtpFormatted
-        dictionary["FROM"] = from.mime
-        dictionary["TO"] = to.map { $0.mime }.joined(separator: ", ")
+	private var headersDictionary: [String: String] {
+		var dictionary = [String: String]()
+		dictionary["MESSAGE-ID"] = id
+		dictionary["DATE"] = Date().smtpFormatted
+		dictionary["FROM"] = from.mime
+		dictionary["TO"] = to.map { $0.mime }.joined(separator: ", ")
 
-        if !cc.isEmpty {
-            dictionary["CC"] = cc.map { $0.mime }.joined(separator: ", ")
-        }
+		if !cc.isEmpty {
+			dictionary["CC"] = cc.map { $0.mime }.joined(separator: ", ")
+		}
 
-        dictionary["SUBJECT"] = subject.mimeEncoded ?? ""
-        dictionary["MIME-VERSION"] = "1.0 (Swift-SMTP)"
+		dictionary["SUBJECT"] = subject.mimeEncoded ?? ""
+		dictionary["MIME-VERSION"] = "1.0 (Swift-SMTP)"
 
-        for (key, value) in additionalHeaders {
-            let keyUppercased = key.uppercased()
-            if  keyUppercased != "CONTENT-TYPE" &&
-                keyUppercased != "CONTENT-DISPOSITION" &&
-                keyUppercased != "CONTENT-TRANSFER-ENCODING" {
-                dictionary[keyUppercased] = value
-            }
-        }
+		for (key, value) in additionalHeaders {
+			let keyUppercased = key.uppercased()
+			if  keyUppercased != "CONTENT-TYPE" &&
+				keyUppercased != "CONTENT-DISPOSITION" &&
+				keyUppercased != "CONTENT-TRANSFER-ENCODING" {
+				dictionary[keyUppercased] = value
+			}
+		}
 
-        return dictionary
-    }
+		return dictionary
+	}
 
-    var headersString: String {
-        return headersDictionary.map { (key, value) in
-            return "\(key): \(value)"
-            }.joined(separator: CRLF)
-    }
+	var headersString: String {
+		return headersDictionary.map { (key, value) in
+			return "\(key): \(value)"
+		}.joined(separator: CRLF)
+	}
 
-    var hasAttachment: Bool {
-        return !attachments.isEmpty || alternative != nil
-    }
+	var hasAttachment: Bool {
+		return !attachments.isEmpty || alternative != nil
+	}
 }
 
 extension Mail {
-    /// Represents a sender or receiver of an email.
-    public struct User {
-        /// The user's name that is displayed in an email. Optional.
-        public let name: String?
+	/// Representa un usuario (remitente o destinatario).
+	public struct User {
+		/// Nombre visible (opcional).
+		public let name: String?
 
-        /// The user's email address.
-        public let email: String
+		/// Correo electrónico.
+		public let email: String
 
-        ///  Initializes a `User`.
-        ///
-        /// - Parameters:
-        ///     - name: The user's name that is displayed in an email. Optional.
-        ///     - email: The user's email address.
-        public init(name: String? = nil, email: String) {
-            self.name = name
-            self.email = email
-        }
+		/// Inicializa un `User`.
+		///
+		/// - Parameters:
+		///   - name: Nombre a mostrar (opcional).
+		///   - email: Dirección de correo del usuario.
+		public init(name: String? = nil, email: String) {
+			self.name = name
+			self.email = email
+		}
 
-        var mime: String {
-            if let name = name, let nameEncoded = name.mimeEncoded {
-                return "\(nameEncoded) <\(email)>"
-            } else {
-                return email
-            }
-        }
-    }
+		var mime: String {
+			if let name = name, let nameEncoded = name.mimeEncoded {
+				return "\(nameEncoded) <\(email)>"
+			} else {
+				return email
+			}
+		}
+	}
 }
 
 extension DateFormatter {
-    static let smtpDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, d MMM yyyy HH:mm:ss ZZZ"
-        return formatter
-    }()
+	static let smtpDateFormatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.dateFormat = "EEE, d MMM yyyy HH:mm:ss ZZZ"
+		return formatter
+	}()
 }
 
 extension Date {
-    var smtpFormatted: String {
-        return DateFormatter.smtpDateFormatter.string(from: self)
-    }
+	var smtpFormatted: String {
+		return DateFormatter.smtpDateFormatter.string(from: self)
+	}
 }
